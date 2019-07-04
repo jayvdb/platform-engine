@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import asyncio
 import json
-import typing
 from collections import namedtuple
 
 from requests.structures import CaseInsensitiveDict
@@ -16,6 +15,7 @@ from .Logger import Logger
 from .Stories import Stories
 from .Types import StreamingService
 from .constants.ServiceConstants import ServiceConstants
+from .entities.Release import Release
 from .processing import Story
 from .processing.Services import Command, Service, Services
 from .utils import Dict
@@ -25,19 +25,11 @@ Subscription = namedtuple('Subscription',
                           ['streaming_service', 'id', 'payload', 'event'])
 
 AppData = namedtuple('AppData', {
-    'app_id': str,
-    'app_name': str,
-    'app_dns': str,
-    'version': int,
+    'app_config': AppConfig,
     'config': Config,
     'logger': Logger,
-    'stories': dict,
     'services': dict,
-    'always_pull_images': bool,
-    'environment': typing.Union[dict, None],
-    'owner_uuid': str,
-    'owner_email': typing.Union[str, None],
-    'app_config': AppConfig
+    'release': Release
 })
 
 
@@ -54,26 +46,27 @@ class App:
 
     def __init__(self, app_data: AppData):
         self._subscriptions = {}
-        self.app_id = app_data.app_id
-        self.app_name = app_data.app_name
-        self.app_dns = app_data.app_dns
+        release = app_data.release
+        self.app_id = release.app_uuid
+        self.app_name = release.app_name
+        self.app_dns = release.app_dns
         self.config = app_data.config
         self.app_config = app_data.app_config
-        self.version = app_data.version
+        self.version = release.version
         self.logger = app_data.logger
-        self.owner_uuid = app_data.owner_uuid
-        self.owner_email = app_data.owner_email
-        self.environment = app_data.environment
-        if app_data.environment is None:
+        self.owner_uuid = release.owner_uuid
+        self.owner_email = release.owner_email
+        self.environment = release.environment
+        if release.environment is None:
             self.environment = {}
         else:
-            self.environment = app_data.environment
+            self.environment = release.environment
 
         self.environment = CaseInsensitiveDict(data=self.environment)
-        self.stories = app_data.stories['stories']
-        self.entrypoint = app_data.stories['entrypoint']
+        self.stories = release.stories['stories']
+        self.entrypoint = release.stories['entrypoint']
         self.services = app_data.services
-        self.always_pull_images = app_data.always_pull_images
+        self.always_pull_images = release.always_pull_images
         secrets = CaseInsensitiveDict()
         for k, v in self.environment.items():
             if not isinstance(v, dict):
@@ -83,6 +76,12 @@ class App:
             'hostname': f'{self.app_dns}.{self.config.APP_DOMAIN}',
             'version': self.version
         }
+
+    def image_pull_policy(self):
+        if self.always_pull_images is True:
+            return 'Always'
+        else:
+            return 'IfNotPresent'
 
     async def bootstrap(self):
         """

@@ -560,12 +560,7 @@ class Kubernetes:
 
         b16_service_name = base64.b16encode(service_name.encode()).decode()
 
-        if app.always_pull_images is True:
-            image_pull_policy = 'Always'
-        else:
-            image_pull_policy = 'IfNotPresent'
-
-        app.logger.debug(f'imagePullPolicy set to {image_pull_policy}')
+        app.logger.debug(f'imagePullPolicy set to {app.image_pull_policy()}')
 
         liveness_probe = cls.get_liveness_probe(app, service_name)
 
@@ -606,7 +601,7 @@ class Kubernetes:
                                     }
                                 },
                                 'command': start_command,
-                                'imagePullPolicy': image_pull_policy,
+                                'imagePullPolicy': app.image_pull_policy(),
                                 'env': env_k8s,
                                 'lifecycle': {
                                 },

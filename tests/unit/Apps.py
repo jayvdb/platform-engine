@@ -404,21 +404,23 @@ async def test_deploy_release(config, magic, patch, deleted,
     else:
         patch.object(App, 'bootstrap', new=async_mock())
 
+    release = Release(
+        app_uuid='app_id',
+        app_name='app_name',
+        version='version',
+        environment='env',
+        stories={'stories': True},
+        maintenance=maintenance,
+        always_pull_images=always_pull_images,
+        app_dns='app_dns',
+        state='QUEUED',
+        deleted=deleted,
+        owner_uuid='owner_uuid',
+        owner_email='owner_email'
+    )
+
     await Apps.deploy_release(
-        config=config, release=Release(
-            app_uuid='app_id',
-            app_name='app_name',
-            version='version',
-            environment='env',
-            stories={'stories': True},
-            maintenance=maintenance,
-            always_pull_images=always_pull_images,
-            app_dns='app_dns',
-            state='QUEUED',
-            deleted=deleted,
-            owner_uuid='owner_uuid',
-            owner_email='owner_email'
-        )
+        config=config, release=release
     )
 
     if maintenance:
@@ -433,18 +435,10 @@ async def test_deploy_release(config, magic, patch, deleted,
             app_logger, config, 'app_id', 'version', ReleaseState.DEPLOYING)
 
         App.__init__.assert_called_with(app_data=AppData(
-            app_id='app_id',
-            app_name='app_name',
-            app_dns='app_dns',
-            version='version',
+            release=release,
             config=config,
             logger=app_logger,
-            stories={'stories': True},
             services=services,
-            always_pull_images=always_pull_images,
-            environment='env',
-            owner_uuid='owner_uuid',
-            owner_email='owner_email',
             app_config=app_config
         ))
 
