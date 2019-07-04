@@ -45,7 +45,6 @@ def app(config, logger, magic):
             maintenance=False,
             deleted=False,
             state='QUEUED'
-
         ),
         config=config,
         logger=logger,
