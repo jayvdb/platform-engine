@@ -601,7 +601,8 @@ async def test_create_ingress(patch, app, async_mock, resource_exists,
 async def test_create_deployment(patch, async_mock, story, image_pull_policy):
     container_name = 'asyncy--alpine-1'
     story.app.app_id = 'my_app'
-    patch.object(story.app, 'image_pull_policy', return_value=image_pull_policy)
+    patch.object(story.app, 'image_pull_policy',
+                 return_value=image_pull_policy)
     image = 'alpine:latest'
 
     env = {'token': 'asyncy-19920', 'username': 'asyncy'}
@@ -778,6 +779,7 @@ async def test_create_deployment(patch, async_mock, story, image_pull_policy):
         mock.call(story.app.config, story.app.logger, expected_verify_path),
         mock.call(story.app.config, story.app.logger, expected_verify_path)
     ]
+
 
 @mark.parametrize('unavailable', [True, False])
 @mark.asyncio
