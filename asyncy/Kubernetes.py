@@ -560,6 +560,8 @@ class Kubernetes:
 
         b16_service_name = base64.b16encode(service_name.encode()).decode()
 
+        app.logger.debug(f'imagePullPolicy set to {app.image_pull_policy()}')
+
         liveness_probe = cls.get_liveness_probe(app, service_name)
 
         payload = {
@@ -599,7 +601,7 @@ class Kubernetes:
                                     }
                                 },
                                 'command': start_command,
-                                'imagePullPolicy': 'Always',
+                                'imagePullPolicy': app.image_pull_policy(),
                                 'env': env_k8s,
                                 'lifecycle': {
                                 },

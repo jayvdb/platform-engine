@@ -10,9 +10,9 @@ from asyncy.Exceptions import StoryscriptError
 from asyncy.Kubernetes import Kubernetes
 from asyncy.Types import StreamingService
 from asyncy.constants.ServiceConstants import ServiceConstants
+from asyncy.entities.Release import Release
 from asyncy.processing import Story
 from asyncy.processing.Services import Command, Service, Services
-from asyncy.utils import Dict
 from asyncy.utils.HttpUtils import HttpUtils
 
 import pytest
@@ -32,17 +32,23 @@ def exc(patch):
 @fixture
 def app(config, logger, magic):
     return App(app_data=AppData(
-        app_id='app_id',
-        app_name='app_name',
-        app_dns='app_dns',
+        release=Release(
+            app_uuid='app_uuid',
+            app_name='app_name',
+            app_dns='app_dns',
+            owner_uuid='owner_uuid',
+            owner_email='example@example.com',
+            environment={},
+            stories=magic(),
+            version=magic(),
+            always_pull_images=False,
+            maintenance=False,
+            deleted=False,
+            state='QUEUED'
+        ),
         config=config,
         logger=logger,
-        version=magic(),
-        stories=magic(),
         services={},
-        owner_uuid='owner_uuid',
-        owner_email='example@example.com',
-        environment={},
         app_config=magic()
     ))
 
@@ -131,7 +137,8 @@ async def test_unsubscribe_all(patch, app, async_mock, magic, response_code):
 
 
 @mark.parametrize('env', [{'env': True}, None, {'a': {'nested': '1'}}])
-def test_app_init(magic, config, logger, env):
+@mark.parametrize('always_pull_images', [False, True])
+def test_app_init(magic, config, logger, env, always_pull_images):
     services = magic()
     stories = magic()
     expected_secrets = {}
@@ -145,18 +152,24 @@ def test_app_init(magic, config, logger, env):
     config.APP_DOMAIN = 'asyncyapp.com'
 
     app = App(app_data=AppData(
-        app_id='app_id',
-        app_name='app_name',
-        app_dns='app_dns',
-        version=version,
-        config=config,
-        logger=logger,
-        stories=stories,
+        release=Release(
+            app_uuid='app_id',
+            app_name='app_name',
+            app_dns='app_dns',
+            version=version,
+            stories=stories,
+            always_pull_images=always_pull_images,
+            environment=env,
+            owner_uuid='owner_1',
+            owner_email='example@example.com',
+            maintenance=False,
+            deleted=False,
+            state='QUEUED'
+        ),
+        app_config=app_config,
         services=services,
-        environment=env,
-        owner_uuid='owner_1',
-        owner_email='example@example.com',
-        app_config=app_config
+        config=config,
+        logger=logger
     ))
 
     if env is None:
@@ -170,12 +183,18 @@ def test_app_init(magic, config, logger, env):
     assert app.owner_email == 'example@example.com'
     assert app.stories == stories['stories']
     assert app.services == services
+    assert app.always_pull_images == always_pull_images
     assert app.environment == env
     assert app.app_context['hostname'] == f'{app.app_dns}.asyncyapp.com'
     assert app.app_context['version'] == version
     assert app.app_context['secrets'] == expected_secrets
     assert app.entrypoint == stories['entrypoint']
     assert app.app_config == app_config
+
+    if always_pull_images is True:
+        assert app.image_pull_policy() == 'Always'
+    else:
+        assert app.image_pull_policy() == 'IfNotPresent'
 
 
 @mark.asyncio

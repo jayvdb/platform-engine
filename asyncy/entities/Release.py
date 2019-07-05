@@ -9,6 +9,7 @@ Release = typing.NamedTuple('Release', [
     ('environment', dict),
     ('stories', typing.Union[dict, None]),
     ('maintenance', bool),
+    ('always_pull_images', bool),
     ('app_dns', str),
     ('state', str),
     ('deleted', bool),

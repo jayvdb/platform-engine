@@ -65,10 +65,7 @@ def test_get_container_configs(patch, magic, config, database):
     ]
 
     database.cur.execute.assert_called_with(expected_query,
-                                            (
-                                                app.owner_uuid,
-                                                registry_url
-                                            ))
+                                            (app.owner_uuid, registry_url))
 
 
 def test_get_release_for_deployment(patch, config, database):
@@ -80,7 +77,8 @@ def test_get_release_for_deployment(patch, config, database):
                             group by app_uuid)
             select app_uuid, id as version, config environment,
                    payload stories, apps.name as app_name,
-                   maintenance, hostname app_dns, state, deleted,
+                   maintenance, always_pull_images,
+                   hostname app_dns, state, deleted,
                    apps.owner_uuid, owner_emails.email as owner_email
             from latest
                    inner join releases using (app_uuid, id)
@@ -98,6 +96,7 @@ def test_get_release_for_deployment(patch, config, database):
         'environment': 'my_environment',
         'stories': 'my_stories',
         'maintenance': 'my_maintenance',
+        'always_pull_images': 'my_always_pull_images',
         'app_dns': 'my_app_dns',
         'state': 'my_state',
         'deleted': 'my_deleted',
@@ -114,6 +113,7 @@ def test_get_release_for_deployment(patch, config, database):
         environment='my_environment',
         stories='my_stories',
         maintenance='my_maintenance',
+        always_pull_images='my_always_pull_images',
         app_dns='my_app_dns',
         state='my_state',
         deleted='my_deleted',

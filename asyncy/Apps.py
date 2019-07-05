@@ -18,6 +18,7 @@ from .GraphQLAPI import GraphQLAPI
 from .Logger import Logger
 from .constants.ServiceConstants import ServiceConstants
 from .db.Database import Database
+from .entities.Release import Release
 from .enums.ReleaseState import ReleaseState
 from .reporting.ExceptionReporter import ExceptionReporter
 from .utils.Dict import Dict
@@ -47,45 +48,48 @@ class Apps:
         return AppConfig(raw)
 
     @classmethod
-    async def deploy_release(cls, config, app_id, app_name, app_dns,
-                             version, environment, stories,
-                             maintenance: bool, deleted: bool,
-                             owner_uuid, owner_email):
+    async def deploy_release(cls, config: Config, release: Release):
+        app_id = release.app_uuid
+        stories = release.stories
 
-        logger = cls.make_logger_for_app(config, app_id, version)
-        logger.info(f'Deploying app {app_id}@{version}')
+        logger = cls.make_logger_for_app(config, app_id, release.version)
+        logger.info(f'Deploying app {app_id}@{release.version}')
 
-        if maintenance:
+        if release.maintenance:
             logger.warn(f'Not updating deployment, app put in maintenance'
-                        f'({app_id}@{version})')
+                        f'({app_id}@{release.version})')
             return
 
-        if deleted:
-            Database.update_release_state(logger, config, app_id, version,
+        if release.deleted:
+            Database.update_release_state(logger, config, app_id,
+                                          release.version,
                                           ReleaseState.NO_DEPLOY)
-            logger.warn(f'Deployment halted {app_id}@{version}; '
-                        f'deleted={deleted}; maintenance={maintenance}')
-            logger.warn(f'State changed to NO_DEPLOY for {app_id}@{version}')
+            logger.warn(f'Deployment halted {app_id}@{release.version}; '
+                        f'deleted={release.deleted}; '
+                        f'maintenance={release.maintenance}')
+            logger.warn(f'State changed to NO_DEPLOY for {app_id}@'
+                        f'{release.version}')
             return
 
-        Database.update_release_state(logger, config, app_id, version,
+        Database.update_release_state(logger, config, app_id,
+                                      release.version,
                                       ReleaseState.DEPLOYING)
 
         try:
-            if environment is not None:
+            if release.environment is not None:
                 # allow user based reporting in the engine. This makes it
                 # possible for users to retrieve deploy errors via slack
                 if 'REPORTING_SLACK_WEBHOOK' in environment and \
                         config.USER_REPORTING_ENABLED is not False:
                     ExceptionReporter.init_app_agents(app_id, {
-                        'slack_webhook': environment['REPORTING_SLACK_WEBHOOK']
+                        'slack_webhook': release.environment['REPORTING_SLACK_WEBHOOK']
                     })
             # Check for the currently active apps by the same owner.
             # Note: This is a super inefficient method, but is OK
             # since it'll last only during beta.
             active_apps = 0
             for app in cls.apps.values():
-                if app is not None and app.owner_uuid == owner_uuid:
+                if app is not None and app.owner_uuid == release.owner_uuid:
                     active_apps += 1
 
             if active_apps >= MAX_ACTIVE_APPS:
@@ -110,46 +114,38 @@ class Apps:
 
             app = App(
                 app_data=AppData(
-                    app_id=app_id,
-                    app_name=app_name,
-                    app_dns=app_dns,
-                    version=version,
+                    app_config=app_config,
                     config=config,
                     logger=logger,
-                    stories=stories,
                     services=services,
-                    environment=environment,
-                    owner_uuid=owner_uuid,
-                    owner_email=owner_email,
-                    app_config=app_config
+                    release=release
                 )
             )
 
             await Containers.clean_app(app)
-
             await Containers.init(app)
             await app.bootstrap()
 
             cls.apps[app_id] = app
             Database.update_release_state(
-                logger, config, app_id, version,
+                logger, config, app_id, release.version,
                 ReleaseState.DEPLOYED
             )
 
-            logger.info(f'Successfully deployed app {app_id}@{version}')
+            logger.info(f'Successfully deployed app {app_id}@{release.version}')
         except BaseException as e:
             Database.update_release_state(
                 logger, config,
-                app_id, version,
+                app_id, release.version,
                 ReleaseState.FAILED
             )
 
             ExceptionReporter.capture_exc(
                 exc_info=e, agent_options={
-                    'app_name': app_name,
+                    'app_name': release.app_name,
                     'app_uuid': app_id,
-                    'app_version': version,
-                    'clever_ident': owner_email,
+                    'app_version': release.version,
+                    'clever_ident': release.owner_email,
                     'clever_event': 'App Deploy Failed',
                     'allow_user_agents': True
                 }
@@ -281,7 +277,7 @@ class Apps:
                                   update_db_state=True)
 
         can_deploy = False
-        release = None
+        release=None
         try:
             can_deploy = await cls.deployment_lock.try_acquire(app_id)
             if not can_deploy:
@@ -302,11 +298,9 @@ class Apps:
                 return
             await asyncio.wait_for(
                 cls.deploy_release(
-                    config, app_id, release.app_name,
-                    release.app_dns, release.version,
-                    release.environment, release.stories,
-                    release.maintenance, release.deleted,
-                    release.owner_uuid, release.owner_email),
+                    config=config,
+                    release=release
+                ),
                 timeout=5 * 60)
             glogger.info(f'Reloaded app {app_id}@{release.version}')
         except BaseException as e:

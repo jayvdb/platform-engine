@@ -597,9 +597,12 @@ async def test_create_ingress(patch, app, async_mock, resource_exists,
 
 
 @mark.asyncio
-async def test_create_deployment(patch, async_mock, story):
+@mark.parametrize('image_pull_policy', ['Always', 'IfNotPresent'])
+async def test_create_deployment(patch, async_mock, story, image_pull_policy):
     container_name = 'asyncy--alpine-1'
     story.app.app_id = 'my_app'
+    patch.object(story.app, 'image_pull_policy',
+                 return_value=image_pull_policy)
     image = 'alpine:latest'
 
     env = {'token': 'asyncy-19920', 'username': 'asyncy'}
@@ -682,7 +685,7 @@ async def test_create_deployment(patch, async_mock, story):
                                 }
                             },
                             'command': start_command,
-                            'imagePullPolicy': 'Always',
+                            'imagePullPolicy': image_pull_policy,
                             'env': [{'name': 'token', 'value': 'asyncy-19920'},
                                     {'name': 'username', 'value': 'asyncy'}],
                             'lifecycle': {
