@@ -444,8 +444,9 @@ class Services:
                         story=story, line=line)
 
                 expected_service_output = command_conf.get('output')
-                ServiceOutputValidator.raise_if_invalid(
-                    expected_service_output, body, chain)
+                if expected_service_output is not None:
+                    ServiceOutputValidator.raise_if_invalid(
+                        expected_service_output, body, chain)
                 return body
             else:
                 return cls.parse_output(command_conf, response.body,
@@ -462,8 +463,10 @@ class Services:
     @classmethod
     def parse_output(cls, command_conf: dict, raw_output, story,
                      line, content_type: str):
-        output = command_conf.get('output', {})
-        t = output.get('type')
+        output = command_conf.get('output', None)
+        if output is None:
+            return raw_output
+        t = output.get('type', None)
         if t is None or t == 'any':
             return raw_output  # We don't know what it is, return raw bytes.
 
