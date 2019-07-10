@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-import asyncio
-
 from asyncy.Exceptions import StoryscriptError
 from asyncy.reporting.Reporter import Reporter
 from asyncy.reporting.ReportingAgent import ReportingAgentOptions
@@ -51,6 +49,196 @@ def test_init(patch):
         release='release',
         logger=logger
     )
+
+
+@mark.asyncio
+async def test_capture_msg(patch, async_mock):
+    Reporter.init({
+        'sentry': {
+            'dsn': 'https://foo:foo@sentry.io/123'
+        },
+        'slack': {
+            'webhook': 'slack_webhook'
+        },
+        'clevertap': {
+            'account': 'account',
+            'pass': 'pass'
+        },
+        'user_reporting': False,
+        'user_reporting_stacktrace': False
+    }, 'release')
+
+    patch.object(SentryAgent, 'publish_msg',
+                 new=async_mock())
+    patch.object(SlackAgent, 'publish_msg',
+                 new=async_mock())
+    patch.object(CleverTapAgent, 'publish_msg',
+                 new=async_mock())
+
+    await Reporter._capture_msg(
+        message='hello world',
+        agent_options=ReportingAgentOptions(
+            agent_config={'hello': 'world'}
+        ))
+
+    SentryAgent.publish_msg.mock.assert_not_called()
+    CleverTapAgent.publish_msg.mock.assert_not_called()
+
+    SlackAgent.publish_msg.mock.assert_called_with(
+        Reporter.get_agent('slack'),
+        message='hello world',
+        agent_config={'hello': 'world'})
+
+
+@mark.asyncio
+async def test_capture_evt(patch, async_mock, magic):
+    Reporter.init({
+        'sentry': {
+            'dsn': 'https://foo:foo@sentry.io/123'
+        },
+        'slack': {
+            'webhook': 'slack_webhook'
+        },
+        'clevertap': {
+            'account': 'account',
+            'pass': 'pass'
+        },
+        'user_reporting': False,
+        'user_reporting_stacktrace': False
+    }, 'release')
+
+    patch.object(SentryAgent, 'publish_evt',
+                 new=async_mock())
+    patch.object(SlackAgent, 'publish_evt',
+                 new=async_mock())
+    patch.object(CleverTapAgent, 'publish_evt',
+                 new=async_mock())
+
+    story = magic()
+    story.app.app_name = 'app_name'
+    story.app.app_id = 'user_app_id'
+    story.app.version = 'app_version'
+    story.name = 'story_name'
+    line = '28'
+
+    agent_config = {
+        'clever_ident': 'foo@foo.com',
+        'clever_event': 'Event'
+    }
+
+    evt_data = {
+        'app_name': story.app.app_name,
+        'app_uuid': story.app.app_id,
+        'app_version': story.app.version,
+        'event_data': {'my_event': 'my_event'},
+        'platform_release': 'release',
+        'story_line': line,
+        'story_name': story.name
+    }
+
+    await Reporter._capture_evt(
+        evt_name='my-event',
+        evt_data={
+            'my_event': 'my_event'
+        },
+        agent_options=ReportingAgentOptions(
+            agent_config=agent_config,
+            app_uuid=story.app.app_id,
+            app_name=story.app.app_name,
+            app_version=story.app.version,
+            story_name=story.name,
+            story_line='28'
+        ))
+
+    SentryAgent.publish_evt.mock.assert_not_called()
+
+    SlackAgent.publish_evt.mock.assert_called_with(
+        Reporter.get_agent('slack'),
+        evt_name='my-event',
+        evt_data=evt_data,
+        agent_config=agent_config)
+
+    CleverTapAgent.publish_evt.mock.assert_called_with(
+        Reporter.get_agent('clevertap'),
+        evt_name='my-event',
+        evt_data=evt_data,
+        agent_config=agent_config)
+
+
+@mark.asyncio
+async def test_capture_evt_with_user_reporting(patch, async_mock, magic):
+    Reporter.init({
+        'sentry': {
+            'dsn': None
+        },
+        'slack': {
+            'webhook': 'slack_webhook'
+        },
+        'clevertap': {
+            'account': None,
+            'pass': None
+        },
+        'user_reporting': True,
+        'user_reporting_stacktrace': False
+    }, 'release')
+
+    user_app_agent = {
+        'slack': {
+            'webhook': 'user_webhook'
+        }
+    }
+
+    Reporter.init_app_agents('user_app_id', user_app_agent)
+
+    assert Reporter.app_agents('user_app_id') == user_app_agent
+
+    patch.object(SlackAgent, 'publish_evt',
+                 new=async_mock())
+
+    story = magic()
+    story.app.app_name = 'app_name'
+    story.app.app_id = 'user_app_id'
+    story.app.version = 'app_version'
+    story.name = 'story_name'
+    line = '28'
+
+    evt_data = {
+        'app_name': story.app.app_name,
+        'app_uuid': story.app.app_id,
+        'app_version': story.app.version,
+        'event_data': {'my_event': 'my_event'},
+        'platform_release': 'release',
+        'story_line': line,
+        'story_name': story.name
+    }
+
+    await Reporter._capture_evt(
+        evt_name='my-event',
+        evt_data={
+            'my_event': 'my_event'
+        },
+        agent_options=ReportingAgentOptions(
+            app_uuid=story.app.app_id,
+            app_name=story.app.app_name,
+            app_version=story.app.version,
+            story_name=story.name,
+            story_line=line,
+            allow_user_events=True
+        ))
+
+    SlackAgent.publish_evt.mock.assert_any_call(
+        Reporter.get_agent('slack'),
+        evt_name='my-event',
+        evt_data=evt_data,
+        agent_config=None)
+
+    SlackAgent.publish_evt.mock.assert_any_call(
+        Reporter.get_agent('slack'),
+        evt_name='my-event',
+        evt_data=evt_data,
+        agent_config={
+            'webhook': 'user_webhook'
+        })
 
 
 @mark.asyncio

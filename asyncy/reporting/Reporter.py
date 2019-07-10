@@ -308,10 +308,10 @@ class Reporter:
 
         suppress_agents = []
 
+        agent_config = None
         if agent_options is not None:
             suppress_agents = agent_options.suppress_agents
-
-        agent_config = None
+            agent_config = agent_options.agent_config
 
         for agent_id, agent_data in cls._registered_agents.items():
             if agent_data.messages is False or \
@@ -319,7 +319,7 @@ class Reporter:
                 continue
             if agent_data.agent is not None:
                 try:
-                    await agent_data.agent.publish_evt(
+                    await agent_data.agent.publish_msg(
                         message=message,
                         agent_config=agent_config
                     )

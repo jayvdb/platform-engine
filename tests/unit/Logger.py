@@ -215,6 +215,34 @@ def test_logger_log(patch, logger):
     Frustum.log.assert_called_with('my-event')
 
 
+def test_logger_log_with_evt_reporting(patch, magic, logger):
+    patch.object(Frustum, 'log')
+    patch.object(Reporter, 'capture_evt')
+    logger.reporting_enabled = False
+    logger.log('my-event')
+
+    Reporter.capture_evt.assert_not_called()
+
+    logger.reporting_enabled = True
+    logger.log('my-event')
+
+    Reporter.capture_evt.assert_not_called()
+
+    agent_options = ReportingAgentOptions(
+        app_name='app_name',
+        app_uuid='app_uuid',
+        app_version=magic()
+    )
+
+    logger.log('my-event', agent_options)
+
+    Reporter.capture_evt.assert_called_with(
+        evt_name='my-event',
+        evt_data={},
+        agent_options=agent_options
+    )
+
+
 def test_logger_log_args(patch, logger):
     patch.object(Frustum, 'log')
     logger.log('my-event', 'extra', 'args')

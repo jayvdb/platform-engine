@@ -114,8 +114,8 @@ class Logger:
         self.frustum.log(event, *args)
 
         try:
-            # let's broadcast any desired events here using
-            # the reporting system
+            # Broadcast any desired events here using
+            # the reporting system.
             from .reporting.Reporter import Reporter
 
             reporting_agent_options = None
@@ -123,7 +123,7 @@ class Logger:
                     args[len(args) - 1], ReportingAgentOptions):
                 reporting_agent_options = args[len(args) - 1]
 
-            # let's only report events where, a log has a
+            # Only report events where a log has a
             # ReportingAgentOptions passed as the last parameter
             if reporting_agent_options is not None:
                 if reporting_agent_options.suppress_events is True or \
