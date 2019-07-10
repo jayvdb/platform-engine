@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-from .mutations.DictMutations import DictMutations
+from .mutations.FloatMutations import FloatMutations
+from .mutations.IntegerMutations import IntegerMutations
 from .mutations.ListMutations import ListMutations
-from .mutations.NumberMutations import NumberMutations
+from .mutations.MapMutations import MapMutations
 from .mutations.StringMutations import StringMutations
 from ..Exceptions import StoryscriptError
 
@@ -18,9 +19,11 @@ class Mutations:
             elif isinstance(value, list):
                 handler = getattr(ListMutations, operator)
             elif isinstance(value, dict):
-                handler = getattr(DictMutations, operator)
-            elif isinstance(value, int) or isinstance(value, float):
-                handler = getattr(NumberMutations, operator)
+                handler = getattr(MapMutations, operator)
+            elif isinstance(value, int):
+                handler = getattr(IntegerMutations, operator)
+            elif isinstance(value, float):
+                handler = getattr(FloatMutations, operator)
         except AttributeError:
             pass  # handler is None at this point.
 

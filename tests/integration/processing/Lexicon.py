@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import math
 import re
 import sys
 from unittest.mock import MagicMock
@@ -1202,4 +1203,91 @@ async def test_type_casts(suite: TestSuite, logger):
 ])
 @mark.asyncio
 async def test_range_mutations(suite: TestSuite, logger):
+    await run_suite(suite, logger)
+
+
+@mark.parametrize('suite', [
+    TestSuite(
+        cases=[
+            TestCase(
+                append='a = 1.23\nb = a.round()',
+                assertion=ContextAssertion(key='b', expected=1)
+            ),
+            TestCase(
+                append='a = 1.56\nb = a.round()',
+                assertion=ContextAssertion(key='b', expected=2)
+            ),
+            TestCase(
+                append='a = 2.22\nb = a.ceil()',
+                assertion=ContextAssertion(key='b', expected=3)
+            ),
+            TestCase(
+                append='a = 4.00\nb = a.ceil()',
+                assertion=ContextAssertion(key='b', expected=4)
+            ),
+            TestCase(
+                append='a = 5.01\nb = a.floor()',
+                assertion=ContextAssertion(key='b', expected=5)
+            ),
+            TestCase(
+                append=f'a = ({math.pi}/2)\nb = a.sin()',
+                assertion=ContextAssertion(key='b', expected=1)
+            ),
+            TestCase(
+                append=f'a = {math.pi}\nb = a.cos()',
+                assertion=ContextAssertion(key='b', expected=-1)
+            ),
+            TestCase(
+                append='a = 0.0\nb = a.tan()',
+                assertion=ContextAssertion(key='b', expected=0)
+            ),
+            TestCase(
+                append='a = 1.0\nb = a.asin()',
+                assertion=ContextAssertion(key='b', expected=math.pi / 2)
+            ),
+            TestCase(
+                append='a = 0.0\nb = a.acos()',
+                assertion=ContextAssertion(key='b', expected=math.pi / 2)
+            ),
+            TestCase(
+                append='a = 0.0\nb = a.atan()',
+                assertion=ContextAssertion(key='b', expected=0)
+            ),
+            TestCase(
+                append=f'a = {math.e}\nb = a.log()',
+                assertion=ContextAssertion(key='b', expected=1)
+            ),
+            TestCase(
+                append=f'a = 4.0\nb = a.log2()',
+                assertion=ContextAssertion(key='b', expected=2)
+            ),
+            TestCase(
+                append=f'a = 1000.0\nb = a.log10()',
+                assertion=ContextAssertion(key='b', expected=3)
+            ),
+            TestCase(
+                append=f'a = 1.0\nb = a.exp()',
+                assertion=ContextAssertion(key='b', expected=math.e)
+            ),
+            TestCase(
+                append=f'a = -1.0\nb = a.abs()',
+                assertion=ContextAssertion(key='b', expected=1)
+            ),
+            TestCase(
+                append=f'a = "nan" as float\nb = a.is_nan()',
+                assertion=ContextAssertion(key='b', expected=True)
+            ),
+            TestCase(
+                append=f'a = "inf" as float\nb = a.is_infinity()',
+                assertion=ContextAssertion(key='b', expected=True)
+            ),
+            TestCase(
+                append=f'a = 4.0\nb = a.sqrt()',
+                assertion=ContextAssertion(key='b', expected=2)
+            ),
+        ]
+    )
+])
+@mark.asyncio
+async def test_float_mutations(suite: TestSuite, logger):
     await run_suite(suite, logger)

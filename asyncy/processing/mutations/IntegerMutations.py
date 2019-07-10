@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 
-class NumberMutations:
+class IntegerMutations:
 
     @classmethod
     def is_odd(cls, mutation, value, story, line, operator):

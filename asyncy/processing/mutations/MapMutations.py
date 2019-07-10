@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 
-class DictMutations:
+class MapMutations:
 
     # DEPRECATED: removed in SS 16.0
     @classmethod
