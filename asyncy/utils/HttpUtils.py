@@ -29,9 +29,11 @@ class HttpUtils:
                 return res
             except HTTPError as e:
                 last_exception = e
-                logger.error(
-                    f'Failed to call {url}; attempt={attempts}; err={str(e)}'
-                )
+                if logger is not None:
+                    logger.error(
+                        f'Failed to call {url}; attempt={attempts}; '
+                        f'err={str(e)}'
+                    )
                 await asyncio.sleep(0.5)
 
         assert last_exception is not None  # Impossible.

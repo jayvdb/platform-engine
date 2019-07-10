@@ -2,7 +2,7 @@
 from tornado.web import RequestHandler
 
 from ..Apps import Apps
-from ..reporting.ExceptionReporter import ExceptionReporter
+from ..reporting.ReportingAgent import ReportingAgentOptions
 
 
 class BaseHandler(RequestHandler):
@@ -18,29 +18,25 @@ class BaseHandler(RequestHandler):
             logger = Apps.get(app_id).logger
         except BaseException:
             logger = self.logger
-        logger.error(f'Story execution failed; cause={str(e)}', exc=e)
-        self.set_status(500, 'Story execution failed')
-        if not self.is_finished():
-            self.finish()
 
         app = Apps.get(app_id)
 
-        agent_options = {
-            'app_uuid': app_id,
-            'app_name': app.app_name,
-            'app_version': app.version,
-            'clever_ident': app.owner_email,
-            'clever_event': 'App Request Failure',
-            'allow_user_agents': True
-        }
+        logger.error(f'Story execution failed; cause={str(e)}', exc=e,
+                     reporting_agent_options=ReportingAgentOptions(
+                         story_name=story_name,
+                         app_uuid=app_id,
+                         app_name=app.app_name,
+                         app_version=app.version,
+                         agent_config={
+                             'clever_ident': app.owner_email,
+                             'clever_event': 'App Request Failure'
+                         },
+                         allow_user_events=True
+                     ))
 
-        if story_name is None:
-            ExceptionReporter.capture_exc(
-                exc_info=e, agent_options=agent_options)
-        else:
-            agent_options['story_name'] = story_name
-            ExceptionReporter.capture_exc(
-                exc_info=e, agent_options=agent_options)
+        self.set_status(500, 'Story execution failed')
+        if not self.is_finished():
+            self.finish()
 
     def is_finished(self):
         return self._finished

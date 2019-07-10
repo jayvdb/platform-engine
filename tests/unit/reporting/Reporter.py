@@ -2,12 +2,13 @@
 import asyncio
 
 from asyncy.Exceptions import StoryscriptError
-from asyncy.reporting.ExceptionReporter import ExceptionReporter
+from asyncy.reporting.Reporter import Reporter
+from asyncy.reporting.ReportingAgent import ReportingAgentOptions
 from asyncy.reporting.agents.CleverTapAgent import CleverTapAgent
 from asyncy.reporting.agents.SentryAgent import SentryAgent
 from asyncy.reporting.agents.SlackAgent import SlackAgent
 
-import pytest
+from pytest import mark
 
 
 def test_init(patch):
@@ -15,59 +16,66 @@ def test_init(patch):
     patch.init(SlackAgent)
     patch.init(CleverTapAgent)
 
-    ExceptionReporter.init({
-        'sentry_dsn': 'sentry_dsn',
-        'slack_webhook': 'slack_webhook',
-        'clevertap_config': {
+    Reporter.init({
+        'sentry': {
+            'dsn': 'sentry_dsn'
+        },
+        'slack': {
+            'webhook': 'slack_webhook'
+        },
+        'clevertap': {
             'account': 'account',
             'pass': 'pass'
         },
         'user_reporting': False,
         'user_reporting_stacktrace': False
-    }, 'release', 'logger')
+    }, 'release')
+
+    logger = Reporter._logger
 
     SentryAgent.__init__.assert_called_with(
         dsn='sentry_dsn',
         release='release',
-        logger='logger')
+        logger=logger
+    )
 
     SlackAgent.__init__.assert_called_with(
         webhook='slack_webhook',
         release='release',
-        logger='logger'
+        logger=logger
     )
 
     CleverTapAgent.__init__.assert_called_with(
         account_id='account',
         account_pass='pass',
         release='release',
-        logger='logger'
+        logger=logger
     )
 
-    assert ExceptionReporter._sentry_agent is not None
-    assert ExceptionReporter._slack_agent is not None
-    assert ExceptionReporter._clever_agent is not None
 
-
-@pytest.mark.asyncio
-async def test_capture_exc(patch, magic):
-    ExceptionReporter.init({
-        'sentry_dsn': 'https://foo:foo@sentry.io/123',
-        'slack_webhook': 'slack_webhook',
-        'clevertap_config': {
+@mark.asyncio
+async def test_capture_exc(patch, async_mock, magic):
+    Reporter.init({
+        'sentry': {
+            'dsn': 'https://foo:foo@sentry.io/123'
+        },
+        'slack': {
+            'webhook': 'slack_webhook'
+        },
+        'clevertap': {
             'account': 'account',
             'pass': 'pass'
         },
         'user_reporting': False,
         'user_reporting_stacktrace': False
-    }, 'release', 'logger')
+    }, 'release')
 
     patch.object(SentryAgent, 'publish_exc',
-                 return_value=asyncio.sleep(1e-3))
+                 new=async_mock())
     patch.object(SlackAgent, 'publish_exc',
-                 return_value=asyncio.sleep(1e-3))
+                 new=async_mock())
     patch.object(CleverTapAgent, 'publish_exc',
-                 return_value=asyncio.sleep(1e-3))
+                 new=async_mock())
 
     story = magic()
     story.app.app_name = 'app_name'
@@ -80,13 +88,16 @@ async def test_capture_exc(patch, magic):
     try:
         raise StoryscriptError(message='foo', story=story, line=line)
     except StoryscriptError as e:
-        await ExceptionReporter._capture_exc(
+        agent_config = {
+            'clever_ident': 'foo@foo.com',
+            'clever_event': 'Event',
+            'full_stacktrace': True
+        }
+        await Reporter._capture_exc(
             exc_info=e,
-            agent_options={
-                'clever_ident': 'foo@foo.com',
-                'clever_event': 'Event',
-                'allow_user_agents': False
-            })
+            agent_options=ReportingAgentOptions(
+                agent_config=agent_config
+            ))
 
         exc_data = {
             'app_uuid': story.app.app_id,
@@ -97,46 +108,46 @@ async def test_capture_exc(patch, magic):
             'platform_release': 'release'
         }
 
-        agent_options = {
-            'clever_ident': 'foo@foo.com',
-            'clever_event': 'Event',
-            'full_stacktrace': True
-        }
-
-        SentryAgent.publish_exc.assert_called_with(
+        SentryAgent.publish_exc.mock.assert_called_with(
+            Reporter.get_agent('sentry'),
             exc_info=e,
             exc_data=exc_data,
-            agent_options=agent_options)
+            agent_config=agent_config)
 
-        SlackAgent.publish_exc.assert_called_with(
+        SlackAgent.publish_exc.mock.assert_called_with(
+            Reporter.get_agent('slack'),
             exc_info=e,
             exc_data=exc_data,
-            agent_options=agent_options)
+            agent_config=agent_config)
 
-        CleverTapAgent.publish_exc.assert_called_with(
+        CleverTapAgent.publish_exc.mock.assert_called_with(
+            Reporter.get_agent('clevertap'),
             exc_info=e,
             exc_data=exc_data,
-            agent_options=agent_options)
+            agent_config=agent_config)
 
 
-@pytest.mark.asyncio
-async def test_capture_exc_with_user_agents(patch, magic):
-    ExceptionReporter.init({
-        'slack_webhook': 'non_user_webhook',
+@mark.asyncio
+async def test_capture_exc_with_user_reporting(patch, async_mock, magic):
+    Reporter.init({
+        'slack': {
+            'webhook': 'non_user_webhook'
+        },
         'user_reporting': True,
         'user_reporting_stacktrace': False
-    }, 'release', 'logger')
+    }, 'release')
 
-    ExceptionReporter.init_app_agents('user_app_id', {
-        'slack_webhook': 'user_webhook'
-    })
+    user_app_agent = {
+        'slack': {
+            'webhook': 'user_webhook'
+        }
+    }
 
-    # 2 sleep coroutines for await
-    patch.object(SlackAgent, 'publish_exc',
-                 side_effect=[
-                     asyncio.sleep(1e-3),
-                     asyncio.sleep(1e-3)
-                 ])
+    Reporter.init_app_agents('user_app_id', user_app_agent)
+
+    assert Reporter.app_agents('user_app_id') == user_app_agent
+
+    patch.object(SlackAgent, 'publish_exc', new=async_mock())
 
     story = magic()
     story.app.app_name = 'app_name'
@@ -146,15 +157,22 @@ async def test_capture_exc_with_user_agents(patch, magic):
     line = magic()
     line['ln'] = '28'
 
+    patch.object(SentryAgent, 'publish_exc',
+                 new=async_mock())
+    patch.object(SlackAgent, 'publish_exc',
+                 new=async_mock())
+    patch.object(CleverTapAgent, 'publish_exc',
+                 new=async_mock())
     try:
         raise StoryscriptError(message='foo', story=story, line=line)
     except StoryscriptError as e:
         # capture_exc is a simple wrapper for _capture_exc which is async
-        await ExceptionReporter._capture_exc(
+        await Reporter._capture_exc(
             exc_info=e,
-            agent_options={
-                'allow_user_agents': True
-            })
+            agent_options=ReportingAgentOptions(
+                allow_user_events=True
+            )
+        )
 
         exc_data = {
             'app_uuid': story.app.app_id,
@@ -164,21 +182,21 @@ async def test_capture_exc_with_user_agents(patch, magic):
             'story_name': story.name,
             'platform_release': 'release'
         }
+        slack_agent = Reporter.get_agent('slack')
 
-        # system based reporting
-        SlackAgent.publish_exc.assert_any_call(
+        SlackAgent.publish_exc.mock.assert_any_call(
+            slack_agent,
             exc_info=e,
             exc_data=exc_data,
-            agent_options={
-                'full_stacktrace': True
-            })
+            agent_config=None)
 
         # the user agent call
-        SlackAgent.publish_exc.assert_any_call(
+        SlackAgent.publish_exc.mock.assert_any_call(
+            slack_agent,
             exc_info=e,
             exc_data=exc_data,
-            agent_options={
+            agent_config={
                 'full_stacktrace': False,
-                'no_stacktrace': True,
+                'suppress_stacktrace': True,
                 'webhook': 'user_webhook'
             })

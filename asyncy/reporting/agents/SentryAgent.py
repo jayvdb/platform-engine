@@ -1,10 +1,6 @@
-# -*- coding: utf-8 -*-
-import traceback
-
 from raven import Client
 
 from ..ReportingAgent import ReportingAgent
-from ...Exceptions import StoryscriptError
 from ...Logger import Logger
 
 
@@ -25,8 +21,17 @@ class SentryAgent(ReportingAgent):
             hook_libraries=[],
             release=release)
 
+    async def publish_msg(self, message: str, agent_config: dict = None):
+        # sentry does not need to track generic messages
+        pass
+
+    async def publish_evt(
+            self, evt_name: str, evt_data: dict, agent_config: dict = None):
+        # sentry does not need to track events
+        pass
+
     async def publish_exc(self, exc_info: BaseException,
-                          exc_data: dict, agent_options=None):
+                          exc_data: dict, agent_config: dict = None):
         if self._sentry_client is None:
             return
 
@@ -35,6 +40,8 @@ class SentryAgent(ReportingAgent):
         app_uuid = None
         app_version = None
         app_name = None
+        story_name = None
+        story_line = None
 
         if 'app_name' in exc_data:
             app_name = exc_data['app_name']
@@ -45,51 +52,40 @@ class SentryAgent(ReportingAgent):
         if 'app_version' in exc_data:
             app_version = exc_data['app_version']
 
-        story_name = None
-        story_line = None
         if 'story_line' in exc_data:
             story_line = exc_data['story_line']
 
         if 'story_name' in exc_data:
             story_name = exc_data['story_name']
 
-        self._sentry_client.user_context({
-            'platform_release': self._release,
-            'app_uuid': app_uuid,
-            'app_name': app_name,
-            'app_version': app_version,
-            'story_name': story_name,
-            'story_line': story_line
-        })
+        full_stacktrace = True
+        suppress_stacktrace = False
 
-        _traceback = self.cleanup_traceback(
-            ''.join(traceback.format_tb(exc_info.__traceback__)))
+        if agent_config is not None:
+            if agent_config.get('full_stacktrace', True) is False:
+                full_stacktrace = False
 
-        err_str = f'{type(exc_info).__qualname__}: {exc_info}'
+            if agent_config.get('suppress_stacktrace', False) is True:
+                suppress_stacktrace = True
 
-        # we need to pull the top level exception for reporting
-        # if requested by the reporter
-        _root_traceback = None
-        if agent_options is not None:
-            if agent_options.get('full_stacktrace', False) and \
-                    type(exc_info) is StoryscriptError and \
-                    exc_info.root is not None:
-                _root_traceback = self.cleanup_traceback(
-                    ''.join(traceback.format_tb(exc_info.root.__traceback__)))
-
-        if _root_traceback is not None:
-            root_err_str = f'{type(exc_info.root).__qualname__}: ' \
-                f'{exc_info.root}'
-            traceback_line = f'{root_err_str}\n\n' \
-                f'Root Traceback:\n{_root_traceback}\n{err_str}\n\n' \
-                f'Traceback:\n{_traceback}'
-        else:
-            traceback_line = f'{err_str}\n\nTraceback:\n{_traceback}'
+        err_str = ReportingAgent.format_tb_error(
+            exc_info=exc_info,
+            full_stacktrace=full_stacktrace,
+            suppress_stacktrace=suppress_stacktrace
+        )
 
         try:
+            self._sentry_client.user_context({
+                'platform_release': self._release,
+                'app_uuid': app_uuid,
+                'app_name': app_name,
+                'app_version': app_version,
+                'story_name': story_name,
+                'story_line': story_line
+            })
             # we utilize captureMessage because captureException
             # will not properly work 100% of the time
             # unless this is always called within try/catch block
-            self._sentry_client.captureMessage(message=traceback_line)
+            self._sentry_client.captureMessage(message=err_str)
         finally:
             self._sentry_client.context.clear()

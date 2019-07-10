@@ -6,6 +6,8 @@ from logging import LoggerAdapter
 
 from asyncy.Config import Config
 from asyncy.Logger import Adapter, JSONFormatter, Logger
+from asyncy.reporting.Reporter import Reporter
+from asyncy.reporting.ReportingAgent import ReportingAgentOptions
 
 from frustum import Frustum
 
@@ -50,69 +52,84 @@ def test_logger_init(logger, config):
     Frustum.__init__.assert_called_with(name, level)
 
 
+def test_logger_events_app_deploying(logger):
+    message = 'Deploying app {}@{}'
+    assert logger.events[0] == ('app-deploying', 'info', message)
+
+
+def test_logger_events_app_deployed(logger):
+    message = 'Successfully deployed app {}@{}'
+    assert logger.events[1] == ('app-deployed', 'info', message)
+
+
+def test_logger_events_app_destroyed(logger):
+    message = 'Completed destroying app {}'
+    assert logger.events[2] == ('app-destroyed', 'info', message)
+
+
 def test_logger_events_container_start(logger):
     message = 'Container {} is executing'
-    assert logger.events[0] == ('container-start', 'info', message)
+    assert logger.events[3] == ('container-start', 'info', message)
 
 
 def test_logger_events_container_end(logger):
     message = 'Container {} has finished executing'
-    assert logger.events[1] == ('container-end', 'info', message)
+    assert logger.events[4] == ('container-end', 'info', message)
 
 
 def test_logger_events_story_start(logger):
     message = 'Start processing story "{}" with id {}'
-    assert logger.events[2] == ('story-start', 'info', message)
+    assert logger.events[5] == ('story-start', 'info', message)
 
 
 def test_logger_events_story_save(logger):
     message = 'Saved results of story "{}"'
-    assert logger.events[3] == ('story-save', 'info', message)
+    assert logger.events[6] == ('story-save', 'info', message)
 
 
 def test_logger_events_story_end(logger):
     message = 'Finished processing story "{}" with id {}'
-    assert logger.events[4] == ('story-end', 'info', message)
+    assert logger.events[7] == ('story-end', 'info', message)
 
 
 def test_logger_events_container_volume(logger):
     message = 'Created volume {}'
-    assert logger.events[5] == ('container-volume', 'debug', message)
+    assert logger.events[8] == ('container-volume', 'debug', message)
 
 
 def test_logger_events_lexicon_if(logger):
     message = 'Processing line {} with "if" method against context {}'
-    assert logger.events[6] == ('lexicon-if', 'debug', message)
+    assert logger.events[9] == ('lexicon-if', 'debug', message)
 
 
 def test_logger_events_story_execute(logger):
     message = 'Received line "{}" from handler'
-    assert logger.events[7] == ('story-execution', 'debug', message)
+    assert logger.events[10] == ('story-execution', 'debug', message)
 
 
 def test_logger_events_story_resolve(logger):
     message = 'Resolved "{}" to "{}"'
-    assert logger.events[8] == ('story-resolve', 'debug', message)
+    assert logger.events[11] == ('story-resolve', 'debug', message)
 
 
 def test_logger_events_story_unless(logger):
     message = 'Processing line {} with "unless" method against context {}'
-    assert logger.events[9] == ('lexicon-unless', 'debug', message)
+    assert logger.events[12] == ('lexicon-unless', 'debug', message)
 
 
 def test_logger_events_service_init(logger):
     message = 'Starting Asyncy version {}'
-    assert logger.events[10] == ('service-init', 'info', message)
+    assert logger.events[13] == ('service-init', 'info', message)
 
 
 def test_logger_events_http_init(logger):
     message = 'HTTP server bound to port {}'
-    assert logger.events[11] == ('http-init', 'info', message)
+    assert logger.events[14] == ('http-init', 'info', message)
 
 
 def test_logger_events_http_run_story(logger):
     message = 'Received run request for story {} via HTTP'
-    assert logger.events[12] == ('http-request-run-story', 'debug', message)
+    assert logger.events[15] == ('http-request-run-story', 'debug', message)
 
 
 def test_logger_adapter(patch, magic, logger):
@@ -232,3 +249,38 @@ def test_logger_log_error_with_exc(patch, logger):
     patch.object(logger, 'frustum')
     logger.error('my-event', 'exc')
     logger.frustum.logger.error.assert_called_with('my-event', exc_info='exc')
+
+
+def test_logger_log_error_with_exc_reporting(patch, magic, logger):
+    patch.object(logger, 'frustum')
+    patch.object(Reporter, 'capture_exc')
+
+    logger.reporting_enabled = False
+    logger.error(message='my-event', exc='exc')
+
+    Reporter.capture_exc.assert_not_called()
+
+    logger.reporting_enabled = True
+    logger.error(message='my-event', exc='exc')
+
+    Reporter.capture_exc.assert_called_with(
+        exc_info='exc',
+        agent_options=None
+    )
+
+    agent_options = ReportingAgentOptions(
+        app_name='app_name',
+        app_uuid='app_uuid',
+        app_version=magic()
+    )
+
+    logger.error(
+        message='my-event',
+        exc='exc',
+        reporting_agent_options=agent_options
+    )
+
+    Reporter.capture_exc.assert_called_with(
+        exc_info='exc',
+        agent_options=agent_options
+    )

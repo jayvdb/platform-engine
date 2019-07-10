@@ -4,7 +4,6 @@ from unittest.mock import MagicMock
 from asyncy.Apps import Apps
 from asyncy.Exceptions import StoryscriptError
 from asyncy.http_handlers.BaseHandler import BaseHandler
-from asyncy.reporting.ExceptionReporter import ExceptionReporter
 
 from pytest import mark
 
@@ -31,7 +30,6 @@ def test_finished(magic, logger):
 @mark.parametrize('story_name', [None, 'super_story'])
 def test_handle_story_exc(patch, magic, logger, exception, story_name):
     handler = BaseHandler(magic(), magic(), logger=logger)
-    patch.object(ExceptionReporter, 'capture_exc')
 
     app = magic()
     app.app_name = 'App'
@@ -45,25 +43,3 @@ def test_handle_story_exc(patch, magic, logger, exception, story_name):
     handler.set_status.assert_called_with(500, 'Story execution failed')
     handler.finish.assert_called()
     logger.error.assert_called()
-
-    if story_name is not None:
-        ExceptionReporter.capture_exc.assert_called_with(
-            exc_info=exception, agent_options={
-                'story_name': story_name,
-                'app_uuid': 'app_id',
-                'app_name': app.app_name,
-                'app_version': app.version,
-                'clever_ident': app.owner_email,
-                'clever_event': 'App Request Failure',
-                'allow_user_agents': True
-            })
-    else:
-        ExceptionReporter.capture_exc.assert_called_with(
-            exc_info=exception, agent_options={
-                'app_uuid': 'app_id',
-                'app_name': app.app_name,
-                'app_version': app.version,
-                'clever_ident': app.owner_email,
-                'clever_event': 'App Request Failure',
-                'allow_user_agents': True
-            })

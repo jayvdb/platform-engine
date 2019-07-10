@@ -8,6 +8,7 @@ from logging import Formatter, LoggerAdapter, StreamHandler, getLevelName
 from frustum import Frustum
 
 from .Exceptions import StoryscriptError
+from .reporting.ReportingAgent import ReportingAgentOptions
 
 log_json = strtobool(os.getenv('LOG_FORMAT_JSON', 'False'))
 
@@ -61,6 +62,9 @@ class JSONFormatter(Formatter):
 
 class Logger:
     events = [
+        ('app-deploying', 'info', 'Deploying app {}@{}'),
+        ('app-deployed', 'info', 'Successfully deployed app {}@{}'),
+        ('app-destroyed', 'info', 'Completed destroying app {}'),
         ('container-start', 'info', 'Container {} is executing'),
         ('container-end', 'info', 'Container {} has finished executing'),
         ('story-start', 'info',
@@ -81,7 +85,8 @@ class Logger:
          'Received run request for story {} via HTTP'),
     ]
 
-    def __init__(self, config):
+    def __init__(self, config, reporting_enabled: bool = True):
+        self.reporting_enabled = reporting_enabled
         self.frustum = Frustum(config.LOGGER_NAME, config.LOGGER_LEVEL)
 
     def adapter(self, app_id, version):
@@ -108,14 +113,51 @@ class Logger:
     def log(self, event, *args):
         self.frustum.log(event, *args)
 
+        try:
+            # let's broadcast any desired events here using
+            # the reporting system
+            from .reporting.Reporter import Reporter
+
+            reporting_agent_options = None
+            if len(args) > 0 and isinstance(
+                    args[len(args) - 1], ReportingAgentOptions):
+                reporting_agent_options = args[len(args) - 1]
+
+            # let's only report events where, a log has a
+            # ReportingAgentOptions passed as the last parameter
+            if reporting_agent_options is not None:
+                if reporting_agent_options.suppress_events is True or \
+                        self.reporting_enabled is False:
+                    return
+
+                Reporter.capture_evt(
+                    evt_name=event,
+                    evt_data={},
+                    agent_options=reporting_agent_options
+                )
+        finally:
+            pass
+
     def info(self, message):
         getattr(self.frustum.logger, 'info')(message)
 
     def debug(self, message):
         getattr(self.frustum.logger, 'debug')(message)
 
-    def error(self, message, exc=None):
+    def error(self, message, exc=None,
+              reporting_agent_options: ReportingAgentOptions = None):
         getattr(self.frustum.logger, 'error')(message, exc_info=exc)
+
+        if (reporting_agent_options is not None and
+            reporting_agent_options.suppress_events is True) or \
+                self.reporting_enabled is False:
+            return
+
+        # local import
+        from .reporting.Reporter import Reporter
+        Reporter.capture_exc(
+            exc_info=exc, agent_options=reporting_agent_options
+        )
 
     def warn(self, message):
         getattr(self.frustum.logger, 'warning')(message)

@@ -18,7 +18,7 @@ from .Logger import Logger
 from .http_handlers.StoryEventHandler import StoryEventHandler
 from .processing.Services import Services
 from .processing.internal import File, Http, Json, Log
-from .reporting.ExceptionReporter import ExceptionReporter
+from .reporting.Reporter import Reporter
 
 _ONE_DAY_IN_SECONDS = 60 * 60 * 24
 
@@ -61,6 +61,22 @@ class Service:
 
         Services.set_logger(logger)
 
+        # initialize the engine's exception reporting system
+        Reporter.init(config={
+            'sentry': {
+                'dsn': config.REPORTING_SENTRY_DSN,
+            },
+            'slack': {
+                'webhook': config.REPORTING_SLACK_WEBHOOK
+            },
+            'clevertap': {
+                'account': config.REPORTING_CLEVERTAP_ACCOUNT,
+                'pass': config.REPORTING_CLEVERTAP_PASS
+            },
+            'user_reporting': config.USER_REPORTING_ENABLED,
+            'user_reporting_stacktrace': config.USER_REPORTING_STACKTRACE
+        }, release=release)
+
         # Init internal services.
         File.init()
         Log.init()
@@ -86,18 +102,17 @@ class Service:
         logger.log('http-init', port)
 
         loop = asyncio.get_event_loop()
-        loop.create_task(Service.init_wrapper(release))
+        loop.create_task(Service.init_wrapper())
 
         tornado.ioloop.IOLoop.current().start()
 
         logger.info('Shutdown complete!')
 
     @staticmethod
-    async def init_wrapper(release: str):
+    async def init_wrapper():
         try:
-            await Apps.init_all(release, config, logger)
+            await Apps.init_all(config, logger)
         except BaseException as e:
-            ExceptionReporter.capture_exc(e)
             logger.error(f'Failed to init apps!', exc=e)
             sys.exit(1)
 

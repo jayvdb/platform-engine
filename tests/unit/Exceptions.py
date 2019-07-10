@@ -51,6 +51,7 @@ def test_exception_trace(magic, patch, story, with_root):
     if root_message:
         root_message = f': {root_message}'
     assert str_version == f"""An exception has occurred:
+
 unknown error{root_message}
     at line 1: line_1 (in story_name)
     at line 2: method=hello (auto generated frame) (in story_name)

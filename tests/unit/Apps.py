@@ -19,7 +19,8 @@ from asyncy.constants.ServiceConstants import ServiceConstants
 from asyncy.db.Database import Database
 from asyncy.entities.Release import Release
 from asyncy.enums.ReleaseState import ReleaseState
-from asyncy.reporting.ExceptionReporter import ExceptionReporter
+from asyncy.reporting.Reporter import Reporter
+from asyncy.reporting.ReportingAgent import ReportingAgentOptions
 
 import psycopg2
 
@@ -100,9 +101,8 @@ async def test_destroy_all(patch, async_mock, magic):
 
 
 @mark.asyncio
-async def test_destroy_all_exc(patch, async_mock, magic):
+async def test_destroy_all_exc(magic):
     app = magic()
-    patch.object(ExceptionReporter, 'capture_exc')
 
     err = BaseException()
 
@@ -113,20 +113,15 @@ async def test_destroy_all_exc(patch, async_mock, magic):
     Apps.apps = {'app_id': app}
     app.app_id = 'app_id'
     app.app_name = 'app_name'
+    app.logger = magic()
     await Apps.destroy_all()
 
-    ExceptionReporter.capture_exc.assert_called_with(
-        exc_info=err, agent_options={
-            'app_uuid': app.app_id,
-            'app_version': app.version,
-            'app_name': app.app_name
-        })
+    app.logger.error.assert_called()
 
 
 @mark.asyncio
 async def test_init_all(patch, magic, async_mock, config, logger, db):
     db()
-    patch.object(ExceptionReporter, 'init')
     patch.init(Thread)
     patch.object(Thread, 'start')
 
@@ -137,20 +132,15 @@ async def test_init_all(patch, magic, async_mock, config, logger, db):
                  return_value=apps)
     patch.object(Apps, 'reload_app', new=async_mock())
 
-    await Apps.init_all('release_ver', config, logger)
+    await Apps.init_all(config, logger)
     Apps.reload_app.mock.assert_called_with(
         config, logger, 'my_app_uuid')
 
-    ExceptionReporter.init.assert_called_with({
-        'sentry_dsn': config.REPORTING_SENTRY_DSN,
-        'slack_webhook': config.REPORTING_SLACK_WEBHOOK,
-        'clevertap_config': {
-            'account': config.REPORTING_CLEVERTAP_ACCOUNT,
-            'pass': config.REPORTING_CLEVERTAP_PASS
-        },
-        'user_reporting': config.USER_REPORTING_ENABLED,
-        'user_reporting_stacktrace': config.USER_REPORTING_STACKTRACE
-    }, 'release_ver', logger)
+    loop = asyncio.get_event_loop()
+    Thread.__init__.assert_called_with(target=Apps.listen_to_releases,
+                                       args=[config, logger, loop],
+                                       daemon=True)
+    Thread.start.assert_called()
 
 
 def test_get(magic):
@@ -204,14 +194,13 @@ async def test_reload_app_no_story(patch, config, logger, db, async_mock):
 @mark.parametrize('raise_exc', [None, exc, asyncio_timeout_exc])
 @mark.parametrize('previous_state', ['QUEUED', 'FAILED'])
 @mark.asyncio
-async def test_reload_app(patch, config, logger, db, async_mock,
+async def test_reload_app(patch, config, logger, async_mock,
                           magic, raise_exc, previous_state):
     old_app = magic()
     app_id = 'app_id'
     app_name = 'app_name'
     app_dns = 'app_dns'
     Apps.apps = {app_id: old_app}
-    patch.object(ExceptionReporter, 'capture_exc')
     app_logger = magic()
     patch.object(Apps, 'make_logger_for_app', return_value=app_logger)
     patch.object(Database, 'update_release_state')
@@ -255,7 +244,6 @@ async def test_reload_app(patch, config, logger, db, async_mock,
 
     if raise_exc:
         logger.error.assert_called()
-        ExceptionReporter.capture_exc.assert_called()
     else:
         logger.error.assert_not_called()
 
@@ -401,10 +389,10 @@ async def test_deploy_release_many_volumes(patch, async_mock):
 )
 @mark.asyncio
 async def test_deploy_release(config, magic, patch, deleted,
-                              async_mock, raise_exc, maintenance,
-                              always_pull_images, environment):
-    patch.object(ExceptionReporter, 'capture_exc')
-    patch.object(ExceptionReporter, 'init_app_agents')
+                              environment, always_pull_images,
+                              async_mock, raise_exc, maintenance):
+    patch.object(Reporter, 'capture_exc')
+    patch.object(Reporter, 'init_app_agents')
     patch.object(Kubernetes, 'clean_namespace', new=async_mock())
     patch.object(Containers, 'init', new=async_mock())
     patch.object(Database, 'update_release_state')
@@ -463,10 +451,19 @@ async def test_deploy_release(config, magic, patch, deleted,
 
         App.bootstrap.mock.assert_called()
         Containers.init.mock.assert_called()
+
+        if environment is not None and \
+                'REPORTING_SLACK_WEBHOOK' in environment:
+            Reporter.init_app_agents.assert_called_with('app_id', {
+                'slack': {
+                    'webhook': environment['REPORTING_SLACK_WEBHOOK']
+                }
+            })
+
         if raise_exc is not None:
             assert Apps.apps.get('app_id') is None
             if raise_exc == exc:
-                ExceptionReporter.capture_exc.assert_called()
+                app_logger.error.assert_called()
             assert Database.update_release_state.mock_calls[1] == mock.call(
                 app_logger, config, 'app_id', 'version', ReleaseState.FAILED)
         else:

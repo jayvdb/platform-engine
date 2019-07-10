@@ -15,7 +15,7 @@ class StoryscriptError(Exception):
             return super().__str__()
 
         stack = self.story.get_stack()
-        trace = f'An exception has occurred:\n{self.message}'
+        trace = f'An exception has occurred:\n\n{self.message}'
 
         if self.root is not None:
             trace += f': {str(self.root)}'
