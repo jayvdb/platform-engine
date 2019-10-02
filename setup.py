@@ -21,12 +21,14 @@ setup(
     author='Storyscript',
     author_email='noreply@storyscript.io',
     version='0.2.0',
-    packages=find_packages(),
+    packages=find_packages(
+        exclude=('build.*', 'bench', 'bench.*', 'tests', 'tests.*'),
+    ),
     tests_require=[
-        'pytest==4.2.0',
-        'pytest-cov==2.6.1',
-        'pytest-mock==1.10.1',
-        'pytest-asyncio==0.10.0'
+        'pytest',
+        'pytest-cov',
+        'pytest-mock',
+        'pytest-asyncio',
     ],
     setup_requires=['pytest-runner'],
     python_requires='>=3.7',
